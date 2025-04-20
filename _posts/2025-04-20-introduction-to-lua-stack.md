@@ -1,13 +1,15 @@
+- [Lua stack 简介](#lua-stack-简介)
+  - [Lua 整体执行流程](#lua-整体执行流程)
+  - [Lua stack 与寄存器](#lua-stack-与寄存器)
+  - [Lua 寄存器分配](#lua-寄存器分配)
+  - [加深理解](#加深理解)
+
 # Lua stack 简介
 
-[Lua 整体执行流程](##Lua-整体执行流程)
-[Lua stack 与寄存器](##Lua-stack-与寄存器)
-[Lua 寄存器分配](##Lua-寄存器分配)
-[加深理解](##加深理解)
+**声明：以下 Lua stack 分析基于 Lua 5.4.7 。并且分析 Lua 脚本代码的栈结构，不包括 C closure ，但总体结构是一致的，只是细节有所不同。**
 
 ## Lua 整体执行流程
 
-**声明：以下 Lua 代码分析基于 lua5.4.7** 。
 开始之前，先来看一段 C 代码。
 
 ```c
@@ -276,7 +278,7 @@ main
 > * All local variables are allocated in registers.
 
 以 C 类比，C stack 有 push/pop 指令进行栈操作，而 Lua stack 是函数调用前就预先分配好空间。
-**说明：这里主要谈及 Lua 代码中进行函数调用的 Lua stack 细节，不包括在宿主代码（比如 C 代码）通过 Lua C API 进行函数调用时的 Lua stack 细节。无论是 Lua 代码还是宿主代码，关于 Lua stack 的整体概念是一致的，只是细节有些许不同**。
+**再次说明：这里主要谈及 Lua 代码中进行函数调用的 Lua stack 细节，不包括在宿主代码（比如 C 代码）通过 Lua C API 进行函数调用时的 Lua stack 细节。无论是 Lua 代码还是宿主代码，关于 Lua stack 的整体概念是一致的，只是细节有些许不同**。
 
 来看看 Lua stack 实现的细节，主要是两方面：数据和调用链。先看 `lua_State` 结构：
 
