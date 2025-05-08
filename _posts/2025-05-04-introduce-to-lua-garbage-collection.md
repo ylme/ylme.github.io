@@ -27,7 +27,7 @@
 * Version 5.4: the experimental generational collector is deleted.
 * Version 5.4: a generational collector comes again.
 
-**本文基于 Lua 5.4.7** 主要介绍 Lua GC 的基本流程。希望读完后，能更好的理解 [Garbage Collection in Lua](https://lua.org/wshop18/Ierusalimschy.pdf) 和 [Lua GC 的工作原理](https://blog.codingnow.com/2018/10/lua_gc.html) 。
+**本文基于 Lua 5.4.7** 主要介绍 Lua GC 的基本流程。希望读完后，能更好的理解 [Garbage Collection in Lua](https://lua.org/wshop18/Ierusalimschy.pdf) 和 [Lua GC 的工作原理](https://blog.codingnow.com/2018/10/lua_gc.html) 。  
 如果自己想动手实现一个垃圾收集器可以参考 [Baby's First Garbage Collector](https://journal.stuffwithstuff.com/2013/12/08/babys-first-garbage-collector/) 。
 
 ## 基本概念
@@ -154,6 +154,7 @@ case LUA_VTHREAD: case LUA_VPROTO: {
 在 lstate.h 注释中提到了一些链表，如下：
 
 ```c
+/*
 ** Some notes about garbage-collected objects: All objects in Lua must
 ** be kept somehow accessible until being freed, so all objects always
 ** belong to one (and only one) of these lists, using field 'next' of
@@ -164,6 +165,7 @@ case LUA_VTHREAD: case LUA_VPROTO: {
 ** 'tobefnz': all objects ready to be finalized;
 ** 'fixedgc': all objects that are not to be collected (currently
 ** only small strings, such as reserved words).
+*/
 ```
 
 在清除阶段，遍历 `g->allgc` 链表，调用 `sweeplist` 函数进行清除处理。
@@ -227,8 +229,8 @@ typedef struct global_State {
   * 当 `GCdebt < 0` 时，可以理解为还有额度，所以不用进行垃圾回收处理。
 * `GCestimate` 表示非垃圾对象占用的字节数。
 
-当 `GCdebt` 为负数时，值越小则下一次触发 GC 则需要更长时间。虚拟机目前仅根据内存分配去评估 GC 触发（比如没有时间机制去触发） ，而 `GCdebt` 在此过程中发挥着重要作用。后续会再详细介绍 `GCdebt` 。
-这里先思考一个问题：**为什么 Lua 不用 `totalbytes` 表示虚拟机内存分配总的字节数呢，而是要通过 `totalbytes + GCdebt` 计算得到**？
+当 `GCdebt` 为负数时，值越小则下一次触发 GC 则需要更长时间。虚拟机目前仅根据内存分配去评估 GC 触发（比如没有时间机制去触发） ，而 `GCdebt` 在此过程中发挥着重要作用。后续会再详细介绍 `GCdebt` 。  
+这里先思考一个问题：**为什么 Lua 不用 `totalbytes` 表示虚拟机内存分配总的字节数呢，而是要通过 `totalbytes + GCdebt` 计算得到**？  
 我个人理解是，如果用 `totalbytes` 表示总的字节数，那么每次内存变更时，除了要更新 `GCdebt` 还要更新 `totalbytes` 。但是现在的实现方式，每次内存变更时仅需更新 `GCdebt` 即可，可以节约 1 次算术运算。
 
 ## 增量 GC
