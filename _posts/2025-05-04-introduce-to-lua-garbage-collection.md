@@ -622,8 +622,39 @@ PIL 也有提及具体的手段：
 * 调整 GC 参数，理解了前文关于 GC's pace 的说明，应该就能根据实际需要去做调整。
 * 关闭 Lua GC ，业务自身通过 `collectgarbage("step", n)` 自行触发 GC 。 
 
-顺便提一下，我司有个上线的游戏服务器发生了 OOM 。用的增量 GC 并且 pause 是默认值 `200` 即内存占用 double 时开始下一次垃圾回收，然后当时触发了某个操作导致短时间内进程的内存急剧增大，然后间接的导致下一次垃圾回收需要内存占用很大时才会执行，但此时已经超过机器的内存上限，从而发生了 OOM 。其实，游戏服务器好几个服务的内存占用都在 20GB 往上，所以 pause 为 `200` 确实有可能发生 OOM 的风险。  
+## GC OOM?
+
+顺便提一下，我司有个线上的游戏服务器发生过 OOM 。用的增量 GC 并且 pause 是默认值 `200` 即内存占用 double 时开始下一次垃圾回收，然后当时触发了某个操作导致短时间内进程的内存急剧增大，然后间接的导致下一次垃圾回收需要内存占用很大时才会执行，但此时已经超过机器的内存上限，从而发生了 OOM 。其实，游戏服务器好几个服务的内存占用都在 20GB 往上，所以 pause 为 `200` 确实有可能发生 OOM 的风险。  
 之后，项目中将大部分服务的 pause 设置成 `100` 。这样当一轮增量 GC 执行完毕后，立刻开始下一次的垃圾回收。
 
 Lua 5.4 分代 GC 的 major collection 的 major multiplier 默认值是 `100` ，也是当下一次内存占用 double 时触发，可能也需要注意是否可能发生 OOM 。  
 其实，总结就是当进程内存处于高位时，比如占用内存在总内存的 70% 以上时，采用内存占用 double 后才触发 GC 的策略，有可能会导致还没有来得及 GC 就已经达到了机器的内存上限，从而发生 OOM 。
+
+此外，对于大部分业务都使用 Lua 开发的进程，还可以活用 Lua emergency GC ，参考 [skynet lalloc](https://github.com/cloudwu/skynet/blob/master/service-src/service_snlua.c#L489) 。
+
+* 定制 lua_State 内存分配函数，并在设置 `mem_limit` 。
+* 当内存分配字节数超过 `mem_limit` 时，返回 `NULL` 从而触发 emergency GC 。
+
+```c
+static void *
+lalloc(void * ud, void *ptr, size_t osize, size_t nsize) {
+  struct snlua *l = ud;
+  size_t mem = l->mem;
+  l->mem += nsize;
+  if (ptr)
+    l->mem -= osize;
+  if (l->mem_limit != 0 && l->mem > l->mem_limit) {
+    if (ptr == NULL || nsize > osize) {
+      l->mem = mem;
+      return NULL;
+    }
+  }
+  if (l->mem > l->mem_report) {
+    l->mem_report *= 2;
+    skynet_error(l->ctx, "Memory warning %.2f M", (float)l->mem / (1024 * 1024));
+  }
+  return skynet_lalloc(ptr, osize, nsize);
+}
+```
+
+这里 `mem_limit` 要选择合适的值，预估一个业务使用的内存上限，并且低于机器的内存上限。保证向操作系统申请内存分配时不会失败，当 Lua 虚拟机内存不断上升达到 `mem_limit` 时触发 emergency GC ，整个进程还能正常运行下去。
