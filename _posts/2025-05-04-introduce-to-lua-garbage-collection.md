@@ -16,6 +16,7 @@
     - [分代 GC's barrier](#分代-gcs-barrier)
     - [分代 GC's pace](#分代-gcs-pace)
   - [GC 优化原则](#gc-优化原则)
+  - [GC OOM?](#gc-oom)
 
 # Lua GC 简介
 
